@@ -41,20 +41,21 @@ class VenueService {
   }
 
   static List<Venue> getNearbyVenues(Position userLocation, {int limit = 5}) {
-    return venues
-        .map((venue) => {
-              'venue': venue,
-              'distance': Geolocator.distanceBetween(
-                userLocation.latitude,
-                userLocation.longitude,
-                venue.latitude,
-                venue.longitude,
-              ),
-            })
-        .toList()
+    final venuesWithDistance = venues.map((venue) => {
+          'venue': venue,
+          'distance': Geolocator.distanceBetween(
+            userLocation.latitude,
+            userLocation.longitude,
+            venue.latitude,
+            venue.longitude,
+          ),
+        }).toList()
       ..sort((a, b) => (a['distance'] as double).compareTo(b['distance'] as double));
     
-    return venues.take(limit).toList();
+    return venuesWithDistance
+        .map((v) => v['venue'] as Venue)
+        .take(limit)
+        .toList();
   }
 
   static List<String> getAvailableSports() {
