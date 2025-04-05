@@ -1,88 +1,6 @@
-// import 'package:flutter/material.dart';
-
-// void main() {
-//   runApp(const MyApp());
-// }
-
-// class MyApp extends StatelessWidget {
-//   const MyApp({super.key});
-
-//   // This widget is the root of your application.
-//   @override
-//   Widget build(BuildContext context) {
-//     return MaterialApp(
-//       title: 'KYONS',
-//       debugShowCheckedModeBanner: false,
-//       theme: ThemeData(
-       
-//         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-//         useMaterial3: true,
-//       ),
-//       home: const MyHomePage(title: 'KYONS'),
-//     );
-//   }
-// }
-
-// class MyHomePage extends StatefulWidget {
-//   const MyHomePage({super.key, required this.title});
-
-
-
-//   final String title;
-
-//   @override
-//   State<MyHomePage> createState() => _MyHomePageState();
-// }
-
-// class _MyHomePageState extends State<MyHomePage> {
-//   int _counter = 0;
-
-//   void _incrementCounter() {
-//     setState(() {
-      
-//       _counter++;
-//     });
-//   }
-
-//   @override
-//   Widget build(BuildContext context) {
-    
-//     return Scaffold(
-//       appBar: AppBar(
-       
-//         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-      
-//         title: Text(widget.title),
-//       ),
-//       body: Center(
-       
-//         child: Column(
-          
-//           mainAxisAlignment: MainAxisAlignment.center,
-//           children: <Widget>[
-//             const Text(
-//               'You have pushed the button this many times:',
-//             ),
-//             Text(
-//               '$_counter',
-//               style: Theme.of(context).textTheme.headlineMedium,
-//             ),
-//           ],
-//         ),
-//       ),
-//       floatingActionButton: FloatingActionButton(
-//         onPressed: _incrementCounter,
-//         tooltip: 'Increment',
-//         child: const Icon(Icons.add),
-//       ),
-//     );
-//   }
-// }
-
-
-
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 
 void main() {
   runApp(const SportsMapApp());
@@ -116,11 +34,6 @@ class _MapScreenState extends State<MapScreen> {
   final List<String> _sports = ["All", "Soccer", "Basketball", "Tennis"];
   String _selectedSport = "All";
 
-  late GoogleMapController _mapController;
-  final LatLng _chicagoCenter = const LatLng(41.8781, -87.6298);
-
-  final Map<String, BitmapDescriptor> _icons = {};
-
   final List<Map<String, dynamic>> _venues = [
     {
       "name": "Harrison Park",
@@ -145,53 +58,62 @@ class _MapScreenState extends State<MapScreen> {
     },
   ];
 
-  @override
-  void initState() {
-    super.initState();
-    _loadCustomIcons();
-  }
+ List<Marker> _getFilteredMarkers() {
+  return _venues
+      .where((venue) =>
+          _selectedSport == "All" || venue["sport"] == _selectedSport)
+      .map((venue) {
+    return Marker(
+      point: venue["position"] as LatLng,
+      width: 60,
+      height: 60,
+      child: Tooltip(
+        message:
+            "${venue["name"]}\n${venue["sport"]} • ${venue["hours"]} • Activity: ${venue["activityLevel"]}",
+        child: Icon(
+          _getSportIcon(venue["sport"]),
+          size: 32,
+          color: Colors.green,
+        ),
+      ),
+    );
+  }).toList();
+}
 
-  Future<void> _loadCustomIcons() async {
-    _icons["Soccer"] = await BitmapDescriptor.fromAssetImage(
-        const ImageConfiguration(size: Size(48, 48)), 'assets/soccer.png');
-    _icons["Basketball"] = await BitmapDescriptor.fromAssetImage(
-        const ImageConfiguration(size: Size(48, 48)), 'assets/basketball.png');
-    _icons["Tennis"] = await BitmapDescriptor.fromAssetImage(
-        const ImageConfiguration(size: Size(48, 48)), 'assets/tennis.png');
-    setState(() {});
-  }
-
-  Set<Marker> _getFilteredMarkers() {
-    return _venues
-        .where((venue) => _selectedSport == "All" || venue["sport"] == _selectedSport)
-        .map((venue) => Marker(
-              markerId: MarkerId(venue["name"]),
-              position: venue["position"],
-              icon: _icons[venue["sport"]] ?? BitmapDescriptor.defaultMarker,
-              infoWindow: InfoWindow(
-                title: venue["name"],
-                snippet:
-                    "${venue["sport"]} | ${venue["hours"]} | Activity: ${venue["activityLevel"]}",
-              ),
-            ))
-        .toSet();
+  IconData _getSportIcon(String sport) {
+    switch (sport) {
+      case "Soccer":
+        return Icons.sports_soccer;
+      case "Basketball":
+        return Icons.sports_basketball;
+      case "Tennis":
+        return Icons.sports_tennis;
+      default:
+        return Icons.location_on;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Chicago Sports Complexes"),
-      ),
+      appBar: AppBar(title: const Text("Chicago Sports Complexes")),
       body: Stack(
         children: [
-          GoogleMap(
-            onMapCreated: (controller) => _mapController = controller,
-            initialCameraPosition: CameraPosition(
-              target: _chicagoCenter,
-              zoom: 12,
+          FlutterMap(
+            options: MapOptions(
+              center: LatLng(41.8781, -87.6298),
+              zoom: 12.0,
             ),
-            markers: _getFilteredMarkers(),
+            children: [
+              TileLayer(
+                urlTemplate:
+                    'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                subdomains: ['a', 'b', 'c'],
+              ),
+              MarkerLayer(
+                markers: _getFilteredMarkers(),
+              ),
+            ],
           ),
           Positioned(
             top: 10,
@@ -226,4 +148,3 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 }
-
