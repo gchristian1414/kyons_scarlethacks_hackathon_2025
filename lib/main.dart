@@ -1,148 +1,172 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:geolocator/geolocator.dart';
+import 'models/venue.dart';
+import 'services/venue_service.dart';
+import 'widgets/venue_details_dialog.dart';
 
 void main() {
-  runApp(const SportsMapApp());
+  runApp(SportsMapApp());
 }
 
 class SportsMapApp extends StatelessWidget {
-  const SportsMapApp({super.key});
-
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      debugShowCheckedModeBanner: false,
       title: 'Chicago Sports Map',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.green),
-        useMaterial3: true,
-      ),
-      home: const MapScreen(),
+      theme: ThemeData(primarySwatch: Colors.blue),
+      home: HomePage(),
     );
   }
 }
 
-class MapScreen extends StatefulWidget {
-  const MapScreen({super.key});
+class HomePage extends StatefulWidget {
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  GoogleMapController? mapController;
+  Position? _currentPosition;
+  String selectedSport = 'All';
+  List<Venue> nearbyVenues = [];
+  bool showAllVenues = false;
 
   @override
-  State<MapScreen> createState() => _MapScreenState();
-}
+  void initState() {
+    super.initState();
+    _getUserLocation();
+  }
 
-class _MapScreenState extends State<MapScreen> {
-  final List<String> _sports = ["All", "Soccer", "Basketball", "Tennis"];
-  String _selectedSport = "All";
+  Future<void> _getUserLocation() async {
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) return;
 
-  final List<Map<String, dynamic>> _venues = [
-    {
-      "name": "Harrison Park",
-      "position": LatLng(41.8600, -87.6560),
-      "sport": "Soccer",
-      "hours": "6 AM - 10 PM",
-      "activityLevel": "Moderate",
-    },
-    {
-      "name": "Margate Park",
-      "position": LatLng(41.9732, -87.6516),
-      "sport": "Basketball",
-      "hours": "6 AM - 11 PM",
-      "activityLevel": "High",
-    },
-    {
-      "name": "Wicker Park",
-      "position": LatLng(41.9088, -87.6796),
-      "sport": "Tennis",
-      "hours": "7 AM - 9 PM",
-      "activityLevel": "Low",
-    },
-  ];
+    LocationPermission permission = await Geolocator.requestPermission();
+    if (permission == LocationPermission.denied) return;
 
- List<Marker> _getFilteredMarkers() {
-  return _venues
-      .where((venue) =>
-          _selectedSport == "All" || venue["sport"] == _selectedSport)
-      .map((venue) {
-    return Marker(
-      point: venue["position"] as LatLng,
-      width: 60,
-      height: 60,
-      child: Tooltip(
-        message:
-            "${venue["name"]}\n${venue["sport"]} • ${venue["hours"]} • Activity: ${venue["activityLevel"]}",
-        child: Icon(
-          _getSportIcon(venue["sport"]),
-          size: 32,
-          color: Colors.green,
+    Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high);
+
+    setState(() {
+      _currentPosition = position;
+      if (position != null) {
+        nearbyVenues = VenueService.getNearbyVenues(position);
+      }
+    });
+  }
+
+  Set<Marker> _getFilteredMarkers() {
+    final venues = showAllVenues
+        ? VenueService.getFilteredVenues(selectedSport)
+        : nearbyVenues.where((v) => selectedSport == 'All' || v.sportType == selectedSport).toList();
+
+    return venues.map((venue) {
+      return Marker(
+        markerId: MarkerId(venue.id),
+        position: LatLng(venue.latitude, venue.longitude),
+        icon: _getSportIcon(venue.sportType),
+        infoWindow: InfoWindow(
+          title: venue.name,
+          snippet: venue.sportType,
+          onTap: () {
+            showDialog(
+              context: context,
+              builder: (_) => VenueDetailsDialog(venue: venue),
+            );
+          },
         ),
-      ),
-    );
-  }).toList();
-}
+      );
+    }).toSet();
+  }
 
-  IconData _getSportIcon(String sport) {
-    switch (sport) {
-      case "Soccer":
-        return Icons.sports_soccer;
-      case "Basketball":
-        return Icons.sports_basketball;
-      case "Tennis":
-        return Icons.sports_tennis;
-      default:
-        return Icons.location_on;
-    }
+  BitmapDescriptor _getSportIcon(String sportType) {
+    // TODO: Implement custom icons for different sports
+    return BitmapDescriptor.defaultMarker;
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Chicago Sports Complexes")),
+      appBar: AppBar(
+        title: const Text('Chicago Sport Complexes'),
+        actions: [
+          DropdownButton<String>(
+            value: selectedSport,
+            items: VenueService.getAvailableSports()
+                .map((sport) => DropdownMenuItem(
+                      value: sport,
+                      child: Text(sport),
+                    ))
+                .toList(),
+            onChanged: (value) {
+              setState(() {
+                selectedSport = value!;
+              });
+            },
+          ),
+        ],
+      ),
       body: Stack(
         children: [
-          FlutterMap(
-            options: MapOptions(
-              center: LatLng(41.8781, -87.6298),
-              zoom: 12.0,
+          GoogleMap(
+            initialCameraPosition: CameraPosition(
+              target: _currentPosition != null
+                  ? LatLng(_currentPosition!.latitude, _currentPosition!.longitude)
+                  : const LatLng(41.8781, -87.6298), // Chicago coordinates
+              zoom: 12,
             ),
-            children: [
-              TileLayer(
-                urlTemplate:
-                    'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-                subdomains: ['a', 'b', 'c'],
-              ),
-              MarkerLayer(
-                markers: _getFilteredMarkers(),
-              ),
-            ],
+            markers: _getFilteredMarkers(),
+            myLocationEnabled: true,
+            myLocationButtonEnabled: true,
+            onMapCreated: (controller) {
+              setState(() {
+                mapController = controller;
+              });
+            },
           ),
           Positioned(
-            top: 10,
-            left: 10,
-            right: 10,
+            bottom: 16,
+            left: 16,
+            right: 16,
             child: Card(
-              elevation: 4,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: DropdownButton<String>(
-                  isExpanded: true,
-                  value: _selectedSport,
-                  items: _sports
-                      .map((sport) => DropdownMenuItem(
-                            value: sport,
-                            child: Text(sport),
-                          ))
-                      .toList(),
-                  onChanged: (value) {
-                    if (value != null) {
-                      setState(() {
-                        _selectedSport = value;
-                      });
-                    }
-                  },
+                padding: const EdgeInsets.all(8.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('Nearby Venues',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    ...nearbyVenues.take(3).map((venue) => ListTile(
+                          title: Text(venue.name),
+                          subtitle: Text(venue.sportType),
+                          onTap: () {
+                            mapController?.animateCamera(
+                              CameraUpdate.newLatLng(
+                                LatLng(venue.latitude, venue.longitude),
+                              ),
+                            );
+                            showDialog(
+                              context: context,
+                              builder: (_) => VenueDetailsDialog(venue: venue),
+                            );
+                          },
+                        )),
+                    if (!showAllVenues)
+                      TextButton(
+                        onPressed: () {
+                          setState(() {
+                            showAllVenues = true;
+                          });
+                        },
+                        child: const Text('See More Venues'),
+                      ),
+                  ],
                 ),
               ),
             ),
-          )
+          ),
         ],
       ),
     );
