@@ -1,4 +1,4 @@
-# kyons_scarlethacks_hackathon_2025
+# map_app
 
 A new Flutter project.
 

@@ -1,4 +1,4 @@
-package com.example.kyons_scarlethacks_hackathon_2025
+package com.example.map_app
 
 import io.flutter.embedding.android.FlutterActivity
 
